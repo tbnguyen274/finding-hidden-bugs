@@ -311,6 +311,7 @@ def _run_bash_lc(command: str, *, timeout_sec: float | None = None) -> tuple[int
         proc = subprocess.run(
             [bash, "-lc", command],
             cwd=str(ROOT),
+            stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
@@ -364,15 +365,22 @@ def run_submit_sh(pid: str) -> tuple[str, str]:
 
     # IMPORTANT: On Windows, passing a native path like D:\...\submit.sh to bash often fails.
     # Run via a POSIX-style relative path from the repo root.
-    cmd = f"./judge/submit.sh {pid}"
+    # Prefix variable assignment to guarantee TTCLI mode even if env propagation is quirky
+    # between Windows <-> (Git Bash / WSL) environments.
+    cmd = f"TTCLI=1 ./judge/submit.sh {pid}"
+    env = dict(os.environ)
+    env["TTCLI"] = "1"
+
     proc = subprocess.run(
         [bash, "-lc", cmd],
         cwd=str(ROOT),
+        stdin=subprocess.DEVNULL,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
         encoding="utf-8",
         errors="replace",
+        env=env,
     )
 
     out = proc.stdout or ""
@@ -397,8 +405,8 @@ def log_result(line: str) -> None:
 def judge_loop(poll_ms: int) -> int:
     _ensure_dirs()
     header = f"{'TIMESTAMP':<19}  {'VERDICT':<12}  {'PROBLEM':<7}"
-    print(header)
-    print("-" * len(_strip_ansi(header)))
+    print(header, flush=True)
+    print("-" * len(_strip_ansi(header)), flush=True)
 
     while True:
         req_path = _pick_next_request()
@@ -434,7 +442,7 @@ def judge_loop(poll_ms: int) -> int:
             verdict, raw = run_submit_sh(pid)
             stamp = _now_ts()
             plain_row, colored_row = _format_judge_row(stamp, verdict, pid)
-            print(colored_row)
+            print(colored_row, flush=True)
             log_result(plain_row)
 
             # Ack file so the submit terminal can display success/failure.
