@@ -1,0 +1,8 @@
+Cho số nguyên n. Hãy đếm xem n có bao nhiêu chữ số 0 tận cùng.
+Dữ liệu vào gồm 1 số nguyên n (0 <= n <= 10^9).
+Dữ liệu ra gồm 1 số nguyên là số chữ số 0 tận cùng
+Ví dụ
+input
+100
+output
+2
