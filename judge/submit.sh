@@ -38,6 +38,12 @@ if [[ ! -f "$STATE_PATH" ]]; then
   exit 1
 fi
 
+# When invoked by ttcli, we want a contest-like workflow:
+# - Allow submitting multiple times in the same round
+# - Do not finalize the round, do not delete state/round.json
+# - Keep history minimal (ttcli logs timestamp/verdict/problem separately)
+TTCLI_MODE="${TTCLI:-0}"
+
 TARGET_ID="${1:-}"
 export TARGET_ID
 
@@ -113,6 +119,7 @@ set -e
 if [[ $RC -ne 0 ]]; then
   echo "COMPILE ERROR (score 0)"
   echo "$COMPILE_OUT"
+  if [[ "$TTCLI_MODE" != "1" ]]; then
   $PYTHON_BIN "${PYTHON_ARGS[@]}" - <<'PY'
 import json, os, time
 path=os.environ['STATE_PATH']
@@ -188,6 +195,7 @@ except FileNotFoundError:
 
 print(f"Saved history: {out_path}")
 PY
+  fi
   exit 0
 fi
 
@@ -254,7 +262,8 @@ export PID
 export STATUS
 export NOW_EPOCH
 
-# Update round.json for this problem
+# Update round.json for this problem (skip in ttcli mode to allow resubmits)
+if [[ "$TTCLI_MODE" != "1" ]]; then
 $PYTHON_BIN "${PYTHON_ARGS[@]}" - <<'PY'
 import json, os
 path=os.environ['STATE_PATH']
@@ -333,3 +342,4 @@ except FileNotFoundError:
 
 print(f"Saved history: {out_path}")
 PY
+fi
