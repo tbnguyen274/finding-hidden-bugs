@@ -26,7 +26,7 @@ while [[ $# -gt 0 ]]; do
     --tests)
       TESTS="$2"; shift 2;;
     *)
-      echo "Usage: ./judge/start.sh [--count 3..5] [--tests N]" >&2
+      echo "Usage: ./judge/start.sh [--count 1..5] [--tests N]" >&2
       exit 2;;
   esac
 done
@@ -61,6 +61,18 @@ ids = []
 for name in sorted(os.listdir(problems_dir)):
     p = os.path.join(problems_dir, name)
     if os.path.isdir(p):
+        buggy = os.path.join(p, 'buggy.cpp')
+        sol = os.path.join(p, 'sol.cpp')
+        gentest = os.path.join(p, 'gentest.cpp')
+        try:
+            if not (os.path.isfile(buggy) and os.path.getsize(buggy) > 0):
+                continue
+            if not (os.path.isfile(sol) and os.path.getsize(sol) > 0):
+                continue
+            if not (os.path.isfile(gentest) and os.path.getsize(gentest) > 0):
+                continue
+        except OSError:
+            continue
         ids.append(name)
 
 if not ids:
@@ -68,11 +80,15 @@ if not ids:
     sys.exit(0)
 
 if count_s.strip() == '':
-    k = random.randint(3, 5)
+    # Default: try for 3-5, but if fewer valid problems exist, just take what's available.
+    if len(ids) >= 3:
+        k = random.randint(3, min(5, len(ids)))
+    else:
+        k = len(ids)
 else:
     k = int(count_s)
-    if k < 3 or k > 5:
-        raise SystemExit('count must be 3..5')
+    if k < 1 or k > 5:
+        raise SystemExit('count must be 1..5')
 
 k = min(k, len(ids))
 selected = random.sample(ids, k)
