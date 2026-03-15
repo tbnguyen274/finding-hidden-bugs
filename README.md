@@ -17,6 +17,10 @@ Chạy:
 - `./judge/start.sh` (random 3–5 bài)
 - hoặc `./judge/start.sh --count 3 --tests 20`
 
+Dọn dẹp để làm round mới (nếu cần chạy tay):
+
+- `./judge/clean.sh`
+
 Script sẽ:
 
 - random 3–5 problem
@@ -52,11 +56,12 @@ Note: output khi chạy test được lưu trong `state/run/<id>/` để workspa
 ## Cách thêm bài
 
 Để thêm bài mới, tạo folder `problems/pXX/` với:
+
 - `statement.txt`: file mô tả đề bài
 - `buggy.cpp`: code có bug
 - `sol.cpp`: code đúng
 - `gentest.cpp`: code gen test (xuất input ra stdout)
-Sau đó chạy `./judge/gentest.sh pXX` để gen test và output chuẩn.
+  Sau đó chạy `./judge/gentest.sh pXX` để gen test và output chuẩn.
 
 ## Cách sửa file `gentest.cpp`
 
@@ -78,6 +83,7 @@ for (int t = 1; t <= numTests; ++t) {
 Ở code trên, input chỉ có 1 số n, bạn chỉ cần sửa phần nhập input cho phù hợp với đề bài.
 
 Một số hàm cần dùng trong file `gentest.cpp`:
+
 - `rd(l, r)`: sinh một số kiểu `int` ngẫu nhiên trong khoảng [l, r]
 - `rdll(l, r)`: sinh một số kiểu `long long` ngẫu nhiên trong khoảng [l, r]
 
