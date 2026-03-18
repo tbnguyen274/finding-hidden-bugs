@@ -36,6 +36,7 @@ PROCESSING_DIR = STATE_DIR / "tt_processing"
 DONE_DIR = STATE_DIR / "tt_done"
 ACK_DIR = STATE_DIR / "tt_ack"
 RESULTS_LOG = STATE_DIR / "tt_results.log"
+STAGE_MANIFEST = STATE_DIR / "ttcli_stage.json"
 
 
 _PID_RE = re.compile(r"^p(\d{1,3})$", re.IGNORECASE)
@@ -48,6 +49,111 @@ def _now_ts() -> str:
 def _ensure_dirs() -> None:
     for p in (QUEUE_DIR, PROCESSING_DIR, DONE_DIR, ACK_DIR):
         p.mkdir(parents=True, exist_ok=True)
+
+
+def _atomic_write_bytes(path: Path, data: bytes) -> None:
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_bytes(data)
+    os.replace(tmp, path)
+
+
+def _copy_file_atomic(src: Path, dst: Path) -> None:
+    _atomic_write_bytes(dst, src.read_bytes())
+
+
+def _cleanup_staged_root_files() -> None:
+    """Remove staged root-level pXX.cpp files created by ttcli.
+
+    Safety: only deletes files recorded in state/ttcli_stage.json.
+    """
+    try:
+        if not STAGE_MANIFEST.exists():
+            return
+        data = json.loads(STAGE_MANIFEST.read_text(encoding="utf-8"))
+    except Exception:
+        # If manifest is corrupt, don't guess what to delete.
+        return
+
+    files = data.get("files")
+    if not isinstance(files, list):
+        return
+
+    for name in files:
+        if not isinstance(name, str):
+            continue
+        # Only allow deleting pXX.cpp at repo root.
+        if not re.match(r"^p\d{2,3}\.cpp$", name, re.IGNORECASE):
+            continue
+        p = ROOT / name
+        try:
+            if p.is_file():
+                p.unlink()
+        except OSError:
+            pass
+
+    try:
+        STAGE_MANIFEST.unlink()
+    except OSError:
+        pass
+
+
+def _stage_round_sources_to_root(pids: Iterable[str]) -> int:
+    """Copy workspace/<pid>.cpp to <repo_root>/<pid>.cpp for quick Ctrl+P access.
+
+    Returns number of files staged.
+    """
+    staged: list[str] = []
+    ws = ROOT / "workspace"
+    for pid in pids:
+        try:
+            norm = normalize_problem_id(pid)
+        except Exception:
+            continue
+
+        src = ws / f"{norm}.cpp"
+        dst = ROOT / f"{norm}.cpp"
+        if not src.exists():
+            continue
+
+        try:
+            _copy_file_atomic(src, dst)
+            staged.append(dst.name)
+        except OSError:
+            continue
+
+    try:
+        STAGE_MANIFEST.write_text(
+            json.dumps({"files": staged}, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+    except OSError:
+        pass
+
+    return len(staged)
+
+
+def _sync_root_to_workspace_if_newer(pid: str) -> bool:
+    """If <root>/<pid>.cpp exists and is newer than workspace/<pid>.cpp, copy it back."""
+    ws = ROOT / "workspace"
+    try:
+        norm = normalize_problem_id(pid)
+    except Exception:
+        return False
+
+    src = ROOT / f"{norm}.cpp"
+    dst = ws / f"{norm}.cpp"
+    if not src.exists() or not src.is_file():
+        return False
+
+    try:
+        if dst.exists() and dst.is_file():
+            if src.stat().st_mtime_ns < dst.stat().st_mtime_ns:
+                return False
+        ws.mkdir(parents=True, exist_ok=True)
+        _copy_file_atomic(src, dst)
+        return True
+    except OSError:
+        return False
 
 
 def _fmt_local_time_ampm(ts: Optional[float] = None) -> str:
@@ -478,10 +584,21 @@ def repl() -> int:
     _ensure_dirs()
     # New REPL session = new round (as requested).
     _clean_tt_ipc_state()
+
+    # Clean root-level staged files from a previous session/round.
+    _cleanup_staged_root_files()
+
     ok, out = _start_fresh_round()
     if ok:
         # Keep it short; the judge script prints the chosen problems.
         print("✔ Metadata are fetched.")
+
+        # Stage workspace sources into repo root so Ctrl+P finds them easily.
+        pids = _read_active_round_problem_ids(only_pending=False)
+        if pids:
+            staged_n = _stage_round_sources_to_root(pids)
+            if staged_n:
+                print("✔ Problems are loaded into repo root.")
     else:
         # Still allow REPL to run, but submissions will likely fail.
         print("✖ Failed to start a new round.")
@@ -500,15 +617,18 @@ def repl() -> int:
             line = input("$ ")
         except EOFError:
             print()
+            _cleanup_staged_root_files()
             return 0
         except KeyboardInterrupt:
             print()
+            _cleanup_staged_root_files()
             return 0
 
         s = line.strip()
         if not s:
             continue
         if s.lower() in ("exit", "quit"):
+            _cleanup_staged_root_files()
             return 0
         if s.lower() in ("help", "?"):
             print("Type: p1 p2 ... then press Enter")
@@ -516,6 +636,9 @@ def repl() -> int:
 
         parts = s.split()
         try:
+            # If user edits the staged root files, sync them back before enqueuing.
+            for token in parts:
+                _sync_root_to_workspace_if_newer(token)
             req = enqueue_submit(parts)
             # Show per-problem submit status, then allow next input.
             for pid in req.problems:
@@ -536,6 +659,8 @@ def repl() -> int:
                     print(f"✔ Submitted {pid}.")
         except Exception as e:
             print(f"Error: {e}")
+
+    # (unreachable)
 
 
 def main(argv: list[str]) -> int:
@@ -570,6 +695,9 @@ def main(argv: list[str]) -> int:
             return 0
 
     if args.cmd == "submit":
+        # If user edits staged root files, sync them back before enqueuing.
+        for token in args.problems:
+            _sync_root_to_workspace_if_newer(token)
         req = enqueue_submit(args.problems)
         if not args.wait:
             print(f"Queued {len(req.problems)} problem(s): {' '.join(req.problems)}")
