@@ -1,0 +1,11 @@
+# Ensure POSIX scripts work on Linux/macOS (avoid /usr/bin/env: 'bash\r')
+*.sh text eol=lf
+
+# Python scripts are portable with LF
+*.py text eol=lf
+
+# Windows batch files should keep CRLF
+*.bat text eol=crlf
+
+# Test data should be treated as binary to avoid line-ending normalization
+problems/**/tests/* -text
