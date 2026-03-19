@@ -7,8 +7,6 @@ Cấu trúc chính:
 - `problems/<id>/` chứa `buggy.cpp`, `sol.cpp`, `gentest.cpp`
 - `problems/<id>/tests/` là nơi **generate test** (`*.in`) và **output chuẩn** (`*.out`)
 - `workspace/<id>.cpp` là file bạn sửa (copy từ `buggy.cpp`)
-- `state/round.json` lưu trạng thái round hiện tại
-- `history/*.json` lưu lịch sử sau khi hoàn thành round
 
 ### 1) Start round
 
@@ -26,7 +24,10 @@ Script sẽ:
 - random 3–5 problem
 - gen tests + expected outputs trong `problems/<id>/tests/`
 - copy `buggy.cpp` vào `workspace/<id>.cpp`
-- tạo `state/round.json`
+
+### Sinh lại testcases cho tất cả bài
+
+- `./judge/gen_all_tests.sh --tests 20`
 
 ### 2) Mở bài hiện tại
 
@@ -45,7 +46,7 @@ Nộp bài bất kỳ trong round (không cần theo thứ tự):
 - `./judge/submit.sh p01`
 
 Logic: compile `workspace/<id>.cpp`, chạy tất cả `tests/*.in`, so output với `tests/*.out`.
-Đúng tất cả test = +10, sai bất kỳ test nào = 0 và đánh dấu `failed`.
+Đúng tất cả test = `ACCEPTED`, sai = `WRONG ANSWER`, compile fail = `COMPILE ERROR`.
 
 Note: output khi chạy test được lưu trong `state/run/<id>/` để workspace gọn.
 
